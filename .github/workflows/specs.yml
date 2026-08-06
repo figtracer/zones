@@ -54,7 +54,7 @@ jobs:
           echo "specs-tree=$(git rev-parse HEAD:specs/ref-impls)" >> "$GITHUB_OUTPUT"
 
       - name: Restore Solidity artifacts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             specs/ref-impls/cache
@@ -122,7 +122,7 @@ jobs:
       # Rust setup, dependency restore, patch, and eight-minute link entirely.
       - name: Restore Tempo-capable forge
         id: forge-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: foundry/target/release/forge
           key: tempo-forge-v1-${{ runner.os }}-${{ steps.foundry-ref.outputs.sha }}-${{ env.TEMPO_FOUNDRY_REF }}
@@ -154,7 +154,7 @@ jobs:
         run: echo "tree=$(git rev-parse HEAD:specs/ref-impls)" >> "$GITHUB_OUTPUT"
 
       - name: Restore Tempo Forge Solidity artifacts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             specs/ref-impls/cache
