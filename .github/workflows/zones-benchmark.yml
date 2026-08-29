@@ -509,7 +509,7 @@ jobs:
 
       - name: Mint read-only Earn token
         id: earn-token
-        uses: tempoxyz/gh-actions/actions/github-sts@dd1014bf8244fded7a501e701cafab240a4f9f0e # main
+        uses: tempoxyz/gh-actions/actions/github-sts@92f7d8fd211faca8a38e892ebe84225d0ea2a0b3 # main
         with:
           scope: tempoxyz/earn
           policy: zones-read
@@ -708,6 +708,7 @@ jobs:
           test -s crates/contracts/benchmark-out/ERC4626Engine.sol/ERC4626Engine.json
           test -s crates/contracts/benchmark-out/Simple4626Vault.sol/Simple4626Vault.json
           test -s crates/contracts/benchmark-out/DemoTokenAuthority.sol/DemoTokenAuthority.json
+          test -s crates/contracts/benchmark-out/BridgeWalletFixture.sol/BridgeWalletFixture.json
 
       - name: Prepare or restore persistent Tempo L1 baseline
         run: |

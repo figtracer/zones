@@ -19,13 +19,12 @@ use alloy_consensus::Transaction;
 use eyre::WrapErr as _;
 use futures::future::try_join_all;
 use std::{collections::HashMap, time::Duration};
-use tempo_precompiles::PATH_USD_ADDRESS;
+use tempo_precompiles::{PATH_USD_ADDRESS, zone_factory::portal};
 use tempo_zone_contracts::{
     IZoneOutbox, TEMPO_STATE_ADDRESS, TempoState, ZONE_OUTBOX_ADDRESS, ZONE_TOKEN_ADDRESS,
     ZonePortal, ZonePortal::Role as PortalRole,
 };
 use zone_node::dev::{ProvisionConfig, provision_zone};
-use zone_primitives::constants::PORTAL_CURRENT_DEPOSIT_QUEUE_HASH_SLOT;
 
 /// Longer timeout for real L1 tests — the L1 dev node produces blocks every
 /// 500ms and the L1Subscriber needs to connect, backfill, and subscribe.
@@ -394,13 +393,13 @@ async fn test_divergent_follower_does_not_create_quorum() -> eyre::Result<()> {
     let divergent_anchor = cluster.l1.provider().get_block_number().await? + 2;
     cluster.nodes[1].l1_state_cache().lock().set(
         cluster.portal_address,
-        PORTAL_CURRENT_DEPOSIT_QUEUE_HASH_SLOT,
+        portal::slots::CURRENT_DEPOSIT_QUEUE_HASH.into(),
         divergent_anchor,
         B256::repeat_byte(0xD1),
     );
     cluster.nodes[2].l1_state_cache().lock().set(
         cluster.portal_address,
-        PORTAL_CURRENT_DEPOSIT_QUEUE_HASH_SLOT,
+        portal::slots::CURRENT_DEPOSIT_QUEUE_HASH.into(),
         divergent_anchor,
         B256::repeat_byte(0xD2),
     );
@@ -571,6 +570,7 @@ async fn test_deposit_via_real_l1() -> eyre::Result<()> {
 
     // Request withdrawal on L2
     let withdrawal_amount: u128 = 500_000; // 0.5 pathUSD
+    let l1_balance_before = l1.balance_of(PATH_USD_ADDRESS, account.address()).await?;
     account.withdraw(withdrawal_amount).await?;
 
     // Wait for the withdrawal to be fully processed on L1
@@ -578,6 +578,7 @@ async fn test_deposit_via_real_l1() -> eyre::Result<()> {
     l1.wait_for_withdrawal_on_l1(
         portal_address,
         account.address(),
+        l1_balance_before,
         withdrawal_amount,
         withdrawal_timeout,
     )
@@ -855,10 +856,14 @@ async fn test_open_mode_unlisted_account_roundtrip() -> eyre::Result<()> {
     let arbitrary_l1_recipient = l1.signer_at(5).address();
     let mut withdrawal = WithdrawalArgs::new(withdrawal_amount);
     withdrawal.to = Some(arbitrary_l1_recipient);
+    let l1_balance_before = l1
+        .balance_of(PATH_USD_ADDRESS, arbitrary_l1_recipient)
+        .await?;
     account.withdraw_with(withdrawal).await?;
     l1.wait_for_withdrawal_on_l1(
         portal_address,
         arbitrary_l1_recipient,
+        l1_balance_before,
         withdrawal_amount,
         Duration::from_secs(60),
     )
@@ -1973,11 +1978,13 @@ async fn test_multiasset_deposit_withdrawal() -> eyre::Result<()> {
 
     // Withdraw pathUSD
     let pathusd_withdrawal: u128 = 500_000; // 0.5 pathUSD
+    let pathusd_balance_before = l1.balance_of(PATH_USD_ADDRESS, account.address()).await?;
     account.withdraw(pathusd_withdrawal).await?;
 
     l1.wait_for_withdrawal_on_l1(
         portal_address,
         account.address(),
+        pathusd_balance_before,
         pathusd_withdrawal,
         withdrawal_timeout,
     )
@@ -1985,6 +1992,7 @@ async fn test_multiasset_deposit_withdrawal() -> eyre::Result<()> {
 
     // Withdraw ZoneUSD
     let zoneusd_withdrawal: u128 = 1_000_000; // 1 ZoneUSD
+    let zoneusd_balance_before = l1.balance_of(l1_zone_usd, account.address()).await?;
     account
         .withdraw_token(l2_zone_usd, zoneusd_withdrawal)
         .await?;
@@ -1993,6 +2001,7 @@ async fn test_multiasset_deposit_withdrawal() -> eyre::Result<()> {
         portal_address,
         l1_zone_usd,
         account.address(),
+        zoneusd_balance_before,
         zoneusd_withdrawal,
         withdrawal_timeout,
     )
@@ -2092,6 +2101,7 @@ async fn test_deposit_and_withdrawal() -> eyre::Result<()> {
         ZoneAccount::with_signer(recipient_signer, &l1, &zone, portal_address);
 
     let withdrawal_amount: u128 = 500_000; // 0.5 pathUSD
+    let l1_balance_before = l1.balance_of(PATH_USD_ADDRESS, recipient).await?;
     recipient_account.withdraw(withdrawal_amount).await?;
 
     // --- Step 6: Wait for the withdrawal to be fully processed on L1 ---
@@ -2099,6 +2109,7 @@ async fn test_deposit_and_withdrawal() -> eyre::Result<()> {
     l1.wait_for_withdrawal_on_l1(
         portal_address,
         recipient,
+        l1_balance_before,
         withdrawal_amount,
         withdrawal_timeout,
     )

@@ -26,8 +26,8 @@ use tokio::net::TcpStream;
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 use zone_chainspec::{ZoneChainSpec, ZoneChainSpecParser};
-use zone_precompiles::tempo_state::slots as tempo_state_slots;
-use zone_primitives::constants::{ZONE_OUTBOX_LAST_BATCH_INDEX_SLOT, zone_chain_id};
+use zone_precompiles::{outbox, tempo_state};
+use zone_primitives::constants::zone_chain_id;
 use zone_prover::{
     DEFAULT_MAX_REQUEST_BYTES, PROTOCOL_VERSION, ProverConnection, VerifyRequest, VerifyResponse,
 };
@@ -738,6 +738,10 @@ async fn portal_parent_number(
     zone: &DynProvider<TempoNetwork>,
     discovery: &Discovery,
 ) -> Result<u64> {
+    if discovery.portal_block_hash.is_zero() {
+        return Ok(0);
+    }
+
     match zone.get_block_by_hash(discovery.portal_block_hash).await? {
         Some(block) => Ok(block.header.number()),
         None => {
@@ -758,17 +762,22 @@ async fn discover_batch(
     from_override: Option<u64>,
     to_override: Option<u64>,
 ) -> Result<(TempoHeader, u64, Vec<ExtractedBlock>)> {
-    let portal_parent_number = portal_parent_number(zone, discovery).await?;
-    let default_from = portal_parent_number
-        .checked_add(1)
-        .ok_or_else(|| eyre!("Zone block number overflow"))?;
-    let from = from_override.unwrap_or(default_from);
+    let from = match from_override {
+        Some(from) => from,
+        None => portal_parent_number(zone, discovery)
+            .await?
+            .checked_add(1)
+            .ok_or_else(|| eyre!("Zone block number overflow"))?,
+    };
     if from == 0 {
         bail!("a batch cannot start at Zone genesis block 0");
     }
     let parent_number = from - 1;
     let parent_header = zone_header(zone, parent_number).await?;
-    if from_override.is_none() && parent_header.hash_slow() != discovery.portal_block_hash {
+    if from_override.is_none()
+        && !discovery.portal_block_hash.is_zero()
+        && parent_header.hash_slow() != discovery.portal_block_hash
+    {
         bail!("resolved parent header does not match the portal block hash");
     }
 
@@ -925,12 +934,12 @@ async fn initial_tempo_header(
     let (hash_word, number_word) = tokio::try_join!(
         zone.get_storage_at(
             TEMPO_STATE_ADDRESS,
-            U256::from(tempo_state_slots::TEMPO_BLOCK_HASH)
+            U256::from(tempo_state::slots::TEMPO_BLOCK_HASH)
         )
         .block_id(block_id),
         zone.get_storage_at(
             TEMPO_STATE_ADDRESS,
-            U256::from(tempo_state_slots::TEMPO_BLOCK_NUMBER)
+            U256::from(tempo_state::slots::TEMPO_BLOCK_NUMBER)
         )
         .block_id(block_id),
     )?;
@@ -951,7 +960,7 @@ async fn withdrawal_batch_index_at(
     block_number: u64,
 ) -> Result<u64> {
     let index = zone
-        .get_storage_at(ZONE_OUTBOX_ADDRESS, ZONE_OUTBOX_LAST_BATCH_INDEX_SLOT)
+        .get_storage_at(ZONE_OUTBOX_ADDRESS, outbox::slots::WITHDRAWAL_BATCH_INDEX)
         .block_id(BlockId::number(block_number))
         .await?;
     Ok(index.as_limbs()[0])

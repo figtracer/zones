@@ -1,6 +1,6 @@
 //! Zone protocol constants shared between host and guest.
 
-use alloy_primitives::{Address, B256, U256, address};
+use alloy_primitives::{Address, U256, address};
 use tempo_hardfork::constants::{mainnet::MAINNET_CHAIN_ID, moderato::MODERATO_CHAIN_ID};
 
 /// Sentinel emitted as `BatchSubmitted.withdrawalQueueIndex` when a batch carried no
@@ -33,16 +33,6 @@ pub const ZONE_OUTBOX_ADDRESS: Address = address!("0x1c0000000000000000000000000
 /// WARNING: Updating this list is a consensus change.
 pub const CONTRACT_DEPLOYER_ALLOWLIST: &[Address] = &[];
 
-/// ZoneTxContext precompile address on Zone L2.
-pub const ZONE_TX_CONTEXT_ADDRESS: Address = address!("0x1c00000000000000000000000000000000000005");
-
-/// Chaum-Pedersen verification precompile address.
-pub const CHAUM_PEDERSEN_VERIFY_ADDRESS: Address =
-    address!("0x1C00000000000000000000000000000000000100");
-
-/// AES-GCM decryption precompile address.
-pub const AES_GCM_DECRYPT_ADDRESS: Address = address!("0x1C00000000000000000000000000000000000101");
-
 /// Zone-native fee manager precompile address.
 ///
 /// This is adjacent to, but distinct from, Tempo L1's fee manager at `0xfeec...0000`.
@@ -52,71 +42,6 @@ pub const ZONE_FEE_MANAGER_ADDRESS: Address =
 /// Default zone token address (pathUSD TIP-20).
 pub const ZONE_TOKEN_ADDRESS: Address = address!("0x20C0000000000000000000000000000000000000");
 
-/// ZonePortal storage slot 0: `admin` (address).
-pub const PORTAL_ADMIN_SLOT: B256 = B256::ZERO;
-
-/// ZonePortal storage slot 3: `currentDepositQueueHash` (bytes32).
-pub const PORTAL_CURRENT_DEPOSIT_QUEUE_HASH_SLOT: B256 = B256::with_last_byte(3);
-
-/// ZonePortal storage slot 5: `_encryptionKeys` dynamic array.
-pub const PORTAL_ENCRYPTION_KEYS_SLOT: B256 = B256::with_last_byte(5);
-
-/// ZonePortal storage slot 6: `_tokenConfigs` mapping.
-pub const PORTAL_TOKEN_CONFIGS_SLOT: B256 = B256::with_last_byte(6);
-
-/// ZonePortal storage slot 26: append-only token-enablement commitment.
-pub const PORTAL_TOKEN_ENABLEMENT_HASH_SLOT: B256 = B256::with_last_byte(26);
-
-/// ZonePortal storage slot 20: `role` (mapping(address => Role)).
-pub const PORTAL_ROLE_SLOT: B256 = B256::with_last_byte(20);
-
-/// ZonePortal slot 21: packed account and gateway enforcement booleans.
-pub const PORTAL_ENFORCEMENT_MODES_SLOT: B256 = B256::with_last_byte(21);
-
-/// ZonePortal storage slot 22: `maxTempoGasRate` (uint128).
-pub const PORTAL_MAX_TEMPO_GAS_RATE_SLOT: B256 = B256::with_last_byte(22);
-
-/// ZonePortal storage slot 25: packed token counter, pause expiry, and disable flag.
-pub const PORTAL_PAUSE_SLOT: B256 = B256::with_last_byte(25);
-
-/// Alias used by consumers reading account allowlist enforcement.
-pub const PORTAL_ACCESS_MODE_SLOT: B256 = PORTAL_ENFORCEMENT_MODES_SLOT;
-
-/// Alias used by consumers reading callback gateway enforcement.
-pub const PORTAL_GATEWAY_MODE_SLOT: B256 = PORTAL_ENFORCEMENT_MODES_SLOT;
-
-// ---------------------------------------------------------------------------
-//  Storage slot constants for the proof system
-// ---------------------------------------------------------------------------
-
-/// ZoneInbox storage slot 0: `processedDepositQueueHash` (bytes32).
-pub const ZONE_INBOX_PROCESSED_HASH_SLOT: U256 = U256::ZERO;
-
-/// ZoneInbox storage slot 1: `processedDepositNumber` (uint64, lower 8 bytes).
-pub const ZONE_INBOX_PROCESSED_NUMBER_SLOT: U256 = {
-    let mut le = [0u8; 32];
-    le[0] = 1;
-    U256::from_le_bytes(le)
-};
-
-/// ZoneInbox storage slot 3: `processedTokenEnablementHash` (bytes32).
-pub const ZONE_INBOX_PROCESSED_TOKEN_ENABLEMENT_HASH_SLOT: B256 = B256::with_last_byte(3);
-
-/// ZoneOutbox storage slot 1: `_withdrawalQueueHash` (bytes32).
-///
-/// Slot 0 is packed `(tempoGasRate, nextWithdrawalIndex)`.
-pub const ZONE_OUTBOX_LAST_BATCH_HASH_SLOT: U256 = {
-    let mut le = [0u8; 32];
-    le[0] = 1;
-    U256::from_le_bytes(le)
-};
-
-/// ZoneOutbox storage slot 2: `_withdrawalBatchIndex` (uint64, lower 8 bytes).
-pub const ZONE_OUTBOX_LAST_BATCH_INDEX_SLOT: U256 = {
-    let mut le = [0u8; 32];
-    le[0] = 2;
-    U256::from_le_bytes(le)
-};
 /// Base offset for deriving **mainnet** zone chain IDs.
 ///
 /// # Range safety
@@ -189,8 +114,8 @@ pub fn zone_chain_id(parent_chain_id: u64, zone_id: u32) -> Result<u64, ZoneChai
     Ok(chain_id)
 }
 
-/// Decodes the parent Tempo chain ID from a Zone chain ID.
-pub fn decode_l1_chain_id(chain_id: u64) -> Result<u64, ZoneChainIdError> {
+/// Decodes the parent Tempo chain ID and ZoneFactory ID from a Zone chain ID.
+pub fn decode_zone_chain_id(chain_id: u64) -> Result<(u64, u32), ZoneChainIdError> {
     let (parent_chain_id, zone_id) =
         if (ZONE_CHAIN_ID_BASE..ZONE_CHAIN_ID_BASE + ZONE_CHAIN_ID_RANGE).contains(&chain_id) {
             (MAINNET_CHAIN_ID, (chain_id - ZONE_CHAIN_ID_BASE) as u32)
@@ -209,10 +134,15 @@ pub fn decode_l1_chain_id(chain_id: u64) -> Result<u64, ZoneChainIdError> {
         };
 
     if zone_chain_id(parent_chain_id, zone_id) == Ok(chain_id) {
-        Ok(parent_chain_id)
+        Ok((parent_chain_id, zone_id))
     } else {
         Err(ZoneChainIdError::InvalidZoneChainId(chain_id))
     }
+}
+
+/// Decodes the parent Tempo chain ID from a Zone chain ID.
+pub fn decode_l1_chain_id(chain_id: u64) -> Result<u64, ZoneChainIdError> {
+    decode_zone_chain_id(chain_id).map(|(parent_chain_id, _)| parent_chain_id)
 }
 
 fn validate_chain_id(parent_chain_id: u64, zone_id: u32) -> Result<(), ZoneChainIdError> {
@@ -285,6 +215,10 @@ mod tests {
             (MAX_GENERIC_PARENT_CHAIN_ID, u32::MAX),
         ] {
             let chain_id = zone_chain_id(parent_chain_id, zone_id).unwrap();
+            assert_eq!(
+                decode_zone_chain_id(chain_id),
+                Ok((parent_chain_id, zone_id))
+            );
             assert_eq!(decode_l1_chain_id(chain_id), Ok(parent_chain_id));
         }
 
